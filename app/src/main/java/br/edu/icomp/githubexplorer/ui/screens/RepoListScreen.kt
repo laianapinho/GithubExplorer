@@ -10,22 +10,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import br.edu.icomp.githubexplorer.data.remote.RetrofitProvider
-import br.edu.icomp.githubexplorer.data.repository.GithubRepository
-import br.edu.icomp.githubexplorer.ui.viewmodel.RepoListUiState
+import br.edu.icomp.githubexplorer.data.AppGraph
 import br.edu.icomp.githubexplorer.ui.viewmodel.RepoListViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -33,16 +29,15 @@ import br.edu.icomp.githubexplorer.ui.viewmodel.RepoListViewModel
 fun RepoListScreen(
     onRepoClick: (owner: String, repo: String) -> Unit
 ) {
-    var username by remember { mutableStateOf("octocat") }
+    val context = LocalContext.current
 
-    // ViewModel simples (Dia 2). Depois vai virar Hilt (Dia 6).
     val vm = remember {
         RepoListViewModel(
-            repository = GithubRepository(RetrofitProvider.api)
+            repository = AppGraph.provideRepository(context)
         )
     }
 
-    val state by vm.state.collectAsState()
+    val ui by vm.ui.collectAsState()
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("GitHub Explorer") }) }
@@ -55,45 +50,48 @@ fun RepoListScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             OutlinedTextField(
-                value = username,
-                onValueChange = { username = it },
+                value = ui.username,
+                onValueChange = vm::onUsernameChange,
                 label = { Text("Usuário (ex: octocat)") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
 
             Button(
-                onClick = { vm.search(username) },
-                modifier = Modifier.fillMaxWidth()
+                onClick = { vm.searchAndSync() },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !ui.isSyncing
             ) {
-                Text("Buscar")
+                Text(if (ui.isSyncing) "Sincronizando..." else "Buscar")
             }
 
-            when (val s = state) {
-                RepoListUiState.Idle -> {
-                    Text("Digite um usuário e clique em Buscar.")
+            // ✅ Conteúdo principal (estados)
+            when {
+                ui.isSyncing && ui.repos.isEmpty() -> {
+                    LoadingView()
                 }
 
-                RepoListUiState.Loading -> {
-                    Text("Carregando...")
+                ui.errorMessage != null && ui.repos.isEmpty() -> {
+                    ErrorView(
+                        message = ui.errorMessage!!,
+                        onRetry = { vm.searchAndSync() }
+                    )
                 }
 
-                is RepoListUiState.Error -> {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(s.message)
-                        Button(onClick = { vm.search(username) }) {
-                            Text("Tentar novamente")
-                        }
-                    }
+                ui.hasSearched && ui.repos.isEmpty() -> {
+                    EmptyView()
                 }
 
-                is RepoListUiState.Success -> {
+                ui.repos.isNotEmpty() -> {
+                    // Se tiver erro mas tiver cache, mostra o erro como aviso
+                    ui.errorMessage?.let { Text(it) }
+
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(s.repos) { repo ->
+                        items(ui.repos) { repo ->
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -102,11 +100,44 @@ fun RepoListScreen(
                             ) {
                                 Text("${repo.owner} / ${repo.name}")
                                 repo.description?.let { Text(it) }
+                                Text("⭐ ${repo.stars}   🍴 ${repo.forks}   🧠 ${repo.language ?: "N/A"}")
                             }
                         }
                     }
                 }
+
+                else -> {
+                    Text("Digite um usuário e clique em Buscar.")
+                }
             }
         }
     }
+}
+
+@Composable
+private fun LoadingView() {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        CircularProgressIndicator()
+    }
+}
+
+@Composable
+private fun ErrorView(
+    message: String,
+    onRetry: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(message)
+        Button(onClick = onRetry) {
+            Text("Tentar novamente")
+        }
+    }
+}
+
+@Composable
+private fun EmptyView() {
+    Text("Nenhum repositório encontrado.")
 }

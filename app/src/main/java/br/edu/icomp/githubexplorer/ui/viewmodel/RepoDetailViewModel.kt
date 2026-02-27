@@ -8,27 +8,35 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-sealed class RepoDetailUiState {
-    data object Loading : RepoDetailUiState()
-    data class Success(val repo: Repo) : RepoDetailUiState()
-    data class Error(val message: String) : RepoDetailUiState()
-}
+data class RepoDetailUiState(
+    val isLoading: Boolean = true,
+    val errorMessage: String? = null,
+    val repo: Repo? = null
+)
 
 class RepoDetailViewModel(
     private val repository: GithubRepository
 ) : ViewModel() {
 
-    private val _state = MutableStateFlow<RepoDetailUiState>(RepoDetailUiState.Loading)
-    val state: StateFlow<RepoDetailUiState> = _state
+    private val _ui = MutableStateFlow(RepoDetailUiState())
+    val ui: StateFlow<RepoDetailUiState> = _ui
 
     fun load(owner: String, repo: String) {
         viewModelScope.launch {
-            _state.value = RepoDetailUiState.Loading
-            try {
-                _state.value = RepoDetailUiState.Success(repository.getRepo(owner, repo))
-            } catch (e: Exception) {
-                _state.value = RepoDetailUiState.Error("Erro ao carregar detalhes.")
+
+            // 1️⃣ Observa o Room (Single Source of Truth)
+            repository.observeRepo(owner, repo).collect { repoFromDb ->
+                _ui.value = _ui.value.copy(
+                    repo = repoFromDb,
+                    isLoading = false
+                )
             }
+        }
+    }
+
+    fun toggleFavorite(id: Long) {
+        viewModelScope.launch {
+            repository.toggleFavorite(id)
         }
     }
 }
