@@ -8,5 +8,6 @@ data class Repo(
     val stars: Int,
     val forks: Int,
     val language: String?,
-    val htmlUrl: String
+    val htmlUrl: String,
+    val isFavorite: Boolean = false
 )

@@ -4,20 +4,24 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import br.edu.icomp.githubexplorer.data.repository.GithubRepository
 import br.edu.icomp.githubexplorer.domain.model.Repo
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 data class RepoListUiState(
     val username: String = "",
     val isSyncing: Boolean = false,
     val errorMessage: String? = null,
     val repos: List<Repo> = emptyList(),
-    val hasSearched: Boolean = false
+    val hasSearched: Boolean = false,
+    val onlyFavorites: Boolean = false
 )
 
-class RepoListViewModel(
+@HiltViewModel
+class RepoListViewModel @Inject constructor(
     private val repository: GithubRepository
 ) : ViewModel() {
 
@@ -31,6 +35,17 @@ class RepoListViewModel(
         _ui.value = _ui.value.copy(username = text)
     }
 
+    fun toggleOnlyFavorites() {
+        val newValue = !_ui.value.onlyFavorites
+        _ui.value = _ui.value.copy(onlyFavorites = newValue)
+    }
+
+    fun toggleFavorite(id: Long) {
+        viewModelScope.launch {
+            repository.toggleFavorite(id)
+        }
+    }
+
     fun searchAndSync() {
         val username = _ui.value.username.trim()
         if (username.isBlank()) {
@@ -41,22 +56,18 @@ class RepoListViewModel(
             return
         }
 
-        // ✅ marca que já tentou buscar (pra EmptyView aparecer)
         _ui.value = _ui.value.copy(hasSearched = true)
 
-        // ✅ Trocar usuário = trocar observação do Room (cancela a anterior)
         if (username != currentUsername) {
             currentUsername = username
             startObserving(username)
         }
 
-        // ✅ Sincroniza API -> Room (Room atualiza UI sozinho)
         viewModelScope.launch {
             _ui.value = _ui.value.copy(isSyncing = true, errorMessage = null)
             try {
                 repository.syncRepos(username)
             } catch (e: Exception) {
-                // se tiver cache, a lista ainda aparece; se não tiver, aparece erro/empty
                 _ui.value = _ui.value.copy(errorMessage = e.message ?: "Falha ao sincronizar.")
             } finally {
                 _ui.value = _ui.value.copy(isSyncing = false)
@@ -68,7 +79,13 @@ class RepoListViewModel(
         observeJob?.cancel()
         observeJob = viewModelScope.launch {
             repository.observeRepos(username).collect { repos ->
-                _ui.value = _ui.value.copy(repos = repos)
+                val filtered = if (_ui.value.onlyFavorites) {
+                    repos.filter { it.isFavorite }
+                } else {
+                    repos
+                }
+
+                _ui.value = _ui.value.copy(repos = filtered)
             }
         }
     }

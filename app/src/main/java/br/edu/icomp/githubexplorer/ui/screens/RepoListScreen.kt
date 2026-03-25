@@ -1,17 +1,17 @@
 package br.edu.icomp.githubexplorer.ui.screens
-
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -22,6 +22,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import br.edu.icomp.githubexplorer.data.AppGraph
+import br.edu.icomp.githubexplorer.ui.components.EmptyView
+import br.edu.icomp.githubexplorer.ui.components.ErrorView
+import br.edu.icomp.githubexplorer.ui.components.LoadingView
 import br.edu.icomp.githubexplorer.ui.viewmodel.RepoListViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,11 +34,7 @@ fun RepoListScreen(
 ) {
     val context = LocalContext.current
 
-    val vm = remember {
-        RepoListViewModel(
-            repository = AppGraph.provideRepository(context)
-        )
-    }
+    val vm: RepoListViewModel = hiltViewModel()
 
     val ui by vm.ui.collectAsState()
 
@@ -57,15 +56,26 @@ fun RepoListScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Button(
-                onClick = { vm.searchAndSync() },
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !ui.isSyncing
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text(if (ui.isSyncing) "Sincronizando..." else "Buscar")
+                Button(
+                    onClick = { vm.searchAndSync() },
+                    enabled = !ui.isSyncing,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(if (ui.isSyncing) "Sincronizando..." else "Buscar")
+                }
+
+                Button(
+                    onClick = { vm.toggleOnlyFavorites() },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(if (ui.onlyFavorites) "Favoritos" else "Todos")
+                }
             }
 
-            // ✅ Conteúdo principal (estados)
             when {
                 ui.isSyncing && ui.repos.isEmpty() -> {
                     LoadingView()
@@ -83,7 +93,7 @@ fun RepoListScreen(
                 }
 
                 ui.repos.isNotEmpty() -> {
-                    // Se tiver erro mas tiver cache, mostra o erro como aviso
+                    // Se tiver erro mas tiver cache, mostra como aviso
                     ui.errorMessage?.let { Text(it) }
 
                     LazyColumn(
@@ -92,15 +102,31 @@ fun RepoListScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(ui.repos) { repo ->
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { onRepoClick(repo.owner, repo.name) }
-                                    .padding(12.dp)
-                            ) {
-                                Text("${repo.owner} / ${repo.name}")
-                                repo.description?.let { Text(it) }
-                                Text("⭐ ${repo.stars}   🍴 ${repo.forks}   🧠 ${repo.language ?: "N/A"}")
+                            Card(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable { onRepoClick(repo.owner, repo.name) }
+                                    ) {
+                                        Text("${repo.owner} / ${repo.name}")
+                                        repo.description?.let { Text(it) }
+                                        Text("⭐ ${repo.stars}   🍴 ${repo.forks}   🧠 ${repo.language ?: "N/A"}")
+                                    }
+
+                                    IconButton(onClick = { vm.toggleFavorite(repo.id) }) {
+                                        Icon(
+                                            imageVector = if (repo.isFavorite) Icons.Filled.Star else Icons.Outlined.StarOutline,
+                                            contentDescription = "Favoritar"
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -112,32 +138,4 @@ fun RepoListScreen(
             }
         }
     }
-}
-
-@Composable
-private fun LoadingView() {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        CircularProgressIndicator()
-    }
-}
-
-@Composable
-private fun ErrorView(
-    message: String,
-    onRetry: () -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(message)
-        Button(onClick = onRetry) {
-            Text("Tentar novamente")
-        }
-    }
-}
-
-@Composable
-private fun EmptyView() {
-    Text("Nenhum repositório encontrado.")
 }

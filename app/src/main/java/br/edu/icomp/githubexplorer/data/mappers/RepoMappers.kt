@@ -11,5 +11,6 @@ fun RepoEntity.toDomain(): Repo = Repo(
     stars = stars,
     forks = forks,
     language = language,
-    htmlUrl = htmlUrl
+    htmlUrl = htmlUrl,
+    isFavorite = isFavorite
 )

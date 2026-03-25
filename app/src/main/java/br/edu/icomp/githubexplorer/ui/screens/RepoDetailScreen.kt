@@ -1,22 +1,22 @@
 package br.edu.icomp.githubexplorer.ui.screens
-
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import br.edu.icomp.githubexplorer.data.AppGraph
+import br.edu.icomp.githubexplorer.ui.components.ErrorView
+import br.edu.icomp.githubexplorer.ui.components.LoadingView
 import br.edu.icomp.githubexplorer.ui.viewmodel.RepoDetailViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,11 +28,7 @@ fun RepoDetailScreen(
 ) {
     val context = LocalContext.current
 
-    val vm = remember {
-        RepoDetailViewModel(
-            repository = AppGraph.provideRepository(context)
-        )
-    }
+    val vm: RepoDetailViewModel = hiltViewModel()
 
     val ui by vm.ui.collectAsState()
 
@@ -53,21 +49,14 @@ fun RepoDetailScreen(
 
             when {
                 ui.isLoading -> {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        CircularProgressIndicator()
-                    }
+                    LoadingView()
                 }
 
                 ui.errorMessage != null && ui.repo == null -> {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(ui.errorMessage!!)
-                        Button(onClick = { vm.load(owner, repo) }) {
-                            Text("Tentar novamente")
-                        }
-                    }
+                    ErrorView(
+                        message = ui.errorMessage!!,
+                        onRetry = { vm.load(owner, repo) }
+                    )
                 }
 
                 ui.repo != null -> {
@@ -83,7 +72,7 @@ fun RepoDetailScreen(
                         onClick = { vm.toggleFavorite(r.id) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Favoritar / Desfavoritar")
+                        Text(if (r.isFavorite) "Remover dos favoritos" else "Adicionar aos favoritos")
                     }
                 }
 

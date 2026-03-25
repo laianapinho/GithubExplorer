@@ -21,17 +21,20 @@ class GithubRepository(
     fun observeRepo(owner: String, repo: String): Flow<Repo?> =
         dao.observeRepo(owner, repo).map { it?.toDomain() }
 
-    // ✅ Sincroniza API -> Room (com erros bem definidos)
+    // ✅ Sincroniza API -> Room preservando favoritos
     suspend fun syncRepos(username: String) {
         try {
-            val remote = api.listRepos(username)
-            val entities = remote.map { it.toEntity(username) }
+            val favoriteIds = dao.getFavoriteIds(username)  // ✅ guarda favoritos atuais
 
-            // estratégia simples: limpa e salva
+            val remote = api.listRepos(username)
+            val entities = remote.map { dto ->
+                val base = dto.toEntity(username)
+                base.copy(isFavorite = favoriteIds.contains(base.id)) // ✅ preserva favorito
+            }
+
             dao.deleteByUsername(username)
             dao.upsertAll(entities)
         } catch (e: IOException) {
-            // sem internet / timeout / falha de rede
             throw Exception("Sem conexão com a internet.")
         } catch (e: HttpException) {
             when (e.code()) {
